@@ -1,7 +1,12 @@
 import pandas as pd 
 import plotly.express as px
+import numpy as np 
 from datetime import date 
 from credentials import db 
+
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#DR. YU! THE DATABASE IS LOCAL NOT HOSTED AND WILL NOT RUN IF YOU TRY TO RUN IT !
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 def team_query(team: str, start_date:int, end_date:int):
     cursor = db.cursor() 
@@ -17,11 +22,14 @@ def team_query(team: str, start_date:int, end_date:int):
                        create_date_obj(end_date),
                        team))
         info = cursor.fetchall() 
-        frame = pd.DataFrame(info, columns=['shotX', 'shotY', 'date', 'made'])
+        frame = pd.DataFrame(info, columns = ['shotX', 'shotY', 'date', 'made'])
         if frame.empty: 
             print("No data for query")
-            return {}, {}
-        return visualize_heat_map(frame), visualize_bar_chart(frame)
+            return {}, {}, []
+        filtered = frame[frame['made'] == 1]
+        if filtered.empty: 
+            return visualize_bar_chart(frame)
+        return visualize_heat_map(filtered), visualize_bar_chart(frame), get_avg_distance(filtered), get_make_percentage(frame)
     except Exception as e: 
         print("DataBase error, failed during selection", e)
 
@@ -42,8 +50,11 @@ def player_query(player: str, start_date:int, end_date:int):
         frame = pd.DataFrame(info, columns=['shotX', 'shotY', 'date', 'made'])
         if frame.empty: 
             print("No data for query")
-            return {}, {} 
-        return visualize_heat_map(frame), visualize_bar_chart(frame)
+            return {}, {}, []
+        filtered = frame[frame['made'] == 1]
+        if filtered.empty: 
+            return visualize_bar_chart(frame)
+        return visualize_heat_map(filtered), visualize_bar_chart(frame), get_avg_distance(filtered), get_make_percentage(frame)
     except Exception as e: 
         print(f"failed to gather data on {player}, please try their full legal name", e)
 
@@ -51,18 +62,19 @@ def visualize_heat_map(dataframe):
     try:
         fig = px.density_heatmap(
             dataframe,
-            x="shotX",
-            y="shotY",
+            x = "shotX",
+            y = "shotY",
             title = "HeatMap of made shots",
-            color_continuous_scale="Viridis",
-            nbinsx=50,
-            nbinsy=50,
-            range_color=[0, 90]
+            color_continuous_scale = "RdBu",
+            nbinsx = 50,
+            nbinsy = 50,
+            range_color = [0, 75]
         )
         return fig
     except Exception as e: 
         print("failed to generate heat map", e)
         return 
+    
 def visualize_bar_chart(dataframe): 
     try: 
         dataframe["year"] = pd.to_datetime(dataframe["date"]).dt.year
@@ -70,16 +82,26 @@ def visualize_bar_chart(dataframe):
         yearly_counts.columns = ["Missed", "Made"]
         fig = px.bar(
             yearly_counts.reset_index(),
-            x="year",
-            y=["Missed", "Made"],
-            title="Shots Made vs. Missed per Year",
-            labels={"value": "Shot Count", "year": "Year"},
-            barmode="group"
+            x = "year",
+            y = ["Missed", "Made"],
+            title = "Shots Made vs. Missed per Year",
+            labels = {"value": "Shot Count", "year": "Year"},
+            barmode = "group"
         )
         return fig
     except Exception as e: 
         print("failed to generate bar chart", e)
         return
+
+def get_avg_distance(frame): 
+    distances = np.sqrt((frame["shotX"] - 23.95) ** 2 + (frame["shotY"] - 4.95) ** 2)
+    return [distances.mean(), max(distances)]
+
+def get_make_percentage(frame): 
+    makes = frame[frame['made'] == 1].shape[0]
+    total = frame.shape[0]
+    accuracy = (makes / total) * 100
+    return int(accuracy)
 
 def create_date_obj(year): 
     formatted = date(year, 1, 1) 
@@ -97,10 +119,10 @@ dates = [
          ]
 
 team_translation = {
-    'hawks': "atl", 'celtics': "bos", "hornets": 'chh', 'bulls':"chi", 'cavaliers': "cle ",
-    'mavericks': "dal", 'nuggets': "den", "pistons":'det', "golden state warriors": 'gsw', "rockets":'hou', 
-    "pacers":'ind', "clippers": 'lac', "lakers": 'lal', "grizzlies":'mem', "heat":'mia', 
-    "bucks":'mil', "timberwolves": 'min', "nets": 'njn', "knicks": 'nyk', "magic": 'orl',
-    "76ers": 'phi', "suns": 'pho', "trailblazers": 'por', "kings": 'sac', "spurs": 'sas', 
-    "sonics (no longer the sonics)": 'sea', "raptors": 'tor', "jazz": 'uta', "grizzlies (vancouver)": 'van', "wizards": 'was'
+    'hawks': "ATL", 'celtics': "BOS", "hornets": 'CHH', 'bulls':"CHI", 'cavaliers': "CLE",
+    'mavericks': "DAL", 'nuggets': "DEN", "pistons": 'DET', "golden state warriors": 'GSW', "rockets":'HOU', 
+    "pacers":'IND', "clippers": 'LAC', "lakers": 'LAL', "grizzlies":'MEM', "heat":'MIA', 
+    "bucks":'MIL', "timberwolves": 'MIN', "nets": 'NJN', "knicks": 'NYK', "magic": 'OLR',
+    "76ers": 'PHI', "suns": 'PHO', "trailblazers": 'POR', "kings": 'SAC', "spurs": 'SAS', 
+    "sonics (no longer the sonics)": 'SEA', "raptors": 'TOR', "jazz": 'UTA', "grizzlies (vancouver)": 'VAN', "wizards": 'WAS'
 }
